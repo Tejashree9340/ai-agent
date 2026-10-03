@@ -8,6 +8,7 @@ import {
 } from "react"
 import { projectId, publicAnonKey } from "../utils/supabase/info"
 import { supabase } from "./lib/supabase"
+import { createCampaign, saveMatch } from "./lib/api"
 
 type Screen = "login" | "landing" | "dashboard" | "create" | "matches" | "partner" | "agreement" | "room" | "approvals" | "campaigns" | "campaign-detail" | "application" | "account" | "instagram-analytics"
 
@@ -1053,8 +1054,13 @@ function Dashboard({ go }: { go: (screen: Screen) => void }) {
   )
 }
 
-function CreateCampaign({ onComplete }: { onComplete: () => void }) {
+function CreateCampaign({
+  onComplete,
+}: {
+  onComplete: (campaignId: string | null, brief: string, input: string) => void
+}) {
   const [step, setStep] = useState(0)
+  const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     name: "GlowSkin Skincare Launch",
     product: "Barrier Restore Serum",
@@ -1129,10 +1135,34 @@ function CreateCampaign({ onComplete }: { onComplete: () => void }) {
     "Audience & Location",
     "Platforms & Requirements",
   ]
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (step < 3) setStep(step + 1)
-    else onComplete()
+    if (step < 3) {
+      setStep(step + 1)
+    } else {
+      setLoading(true)
+      let createdId: string | null = null
+      try {
+        const campaign = await createCampaign({
+          name: form.name,
+          product: form.product,
+          goal: form.goal,
+          budget: form.budget,
+          audience: form.audience,
+          location: form.location,
+          platforms: form.platforms,
+          requirements: form.requirements,
+        })
+        createdId = campaign.id
+      } catch (err) {
+        console.error("Failed to create campaign in DB:", err)
+      } finally {
+        setLoading(false)
+      }
+      const brief = `Campaign: ${form.name}. Product: ${form.product}. Goal: ${form.goal}. Budget: ${form.budget}. Audience: ${form.audience}. Location: ${form.location}. Platforms: ${form.platforms}. Requirements: ${form.requirements}`
+      const input = form.requirements
+      onComplete(createdId, brief, input)
+    }
   }
   return (
     <>
@@ -1261,9 +1291,15 @@ function MatchCard({
 function Matches({
   go,
   select,
+  aiInsight,
+  aiLoading,
+  campaignId,
 }: {
   go: (screen: Screen) => void
   select: (id: string) => void
+  aiInsight?: string | null
+  aiLoading?: boolean
+  campaignId?: string | null
 }) {
   return (
     <>
@@ -1282,6 +1318,23 @@ function Matches({
         <Badge>Creative Agencies</Badge>
         <Badge tone="success">Within ₹75,000 cap</Badge>
       </div>
+      {aiLoading && (
+        <Card className="assistant-card" style={{ marginBottom: 16 }}>
+          <div className="auth-spinner" />
+          <h3>Nuroen AI Agent analyzing campaign brief...</h3>
+          <p>Evaluating target audience, requirements, and optimal creator alignment.</p>
+        </Card>
+      )}
+      {aiInsight && !aiLoading && (
+        <Card className="assistant-card" style={{ marginBottom: 16 }}>
+          <div className="spark">
+            <img src={`${A}/bff7d.svg`} alt="" />
+          </div>
+          <Badge tone="success">Nuroen AI Match Intelligence</Badge>
+          <h3>AI Agent Analysis</h3>
+          <p style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</p>
+        </Card>
+      )}
       <div className="matches-layout">
         <div className="match-list">
           {partners.map((partner) => (
@@ -2523,6 +2576,8 @@ function AccountSettings({
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login")
   const [authReady, setAuthReady] = useState(false)
+  const [aiInsight, setAiInsight] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [displayName, setDisplayName] = useState("Mystique Member")
   const [passwordRecovery, setPasswordRecovery] = useState(
@@ -2616,10 +2671,46 @@ export default function App() {
       page = <Dashboard go={setScreen} />
       break
     case "create":
-      page = <CreateCampaign onComplete={() => setScreen("matches")} />
+      page = (
+        <CreateCampaign
+          onComplete={async (brief, input) => {
+            setScreen("matches")
+            setAiLoading(true)
+            setAiInsight(null)
+            try {
+              const res = await fetch("/api/ai-match", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ campaign_brief: brief, campaign_input: input }),
+              })
+              const data = await res.json()
+              const text =
+                typeof data?.output === "string"
+                  ? data.output
+                  : typeof data?.result === "string"
+                    ? data.result
+                    : typeof data?.response === "string"
+                      ? data.response
+                      : JSON.stringify(data)
+              setAiInsight(text)
+            } catch {
+              setAiInsight("AI agent could not be reached. Showing curated results.")
+            } finally {
+              setAiLoading(false)
+            }
+          }}
+        />
+      )
       break
     case "matches":
-      page = <Matches go={setScreen} select={setSelectedPartner} />
+      page = (
+        <Matches
+          go={setScreen}
+          select={setSelectedPartner}
+          aiInsight={aiInsight}
+          aiLoading={aiLoading}
+        />
+      )
       break
     case "partner":
       page = <PartnerDetail partner={partner} go={setScreen} />
