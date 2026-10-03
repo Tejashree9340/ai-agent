@@ -1,0 +1,15 @@
+{
+  "title": "Mystique — Partnership Intelligence",
+  "description": "Connect businesses, creators, and agencies through AI-driven campaign matching, simplifying partnership management and collaboration for effective marketing.",
+  "language": "en",
+  "icons": {
+    "icon": "/assets/a92b9.svg"
+  },
+  "robots": {
+    "index": true
+  },
+  "accessibility": {
+    "addBypassLinks": true,
+    "ignoreReducedMotion": false
+  }
+}
