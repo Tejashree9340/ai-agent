@@ -586,9 +586,19 @@ function Login({
       provider: "google",
       options: { redirectTo: window.location.origin },
     })
+    setLoading(false)
     if (authError) {
-      setLoading(false)
-      setError(authError.message)
+      if (
+        authError.message.toLowerCase().includes("provider is not enabled") ||
+        authError.message.toLowerCase().includes("unsupported provider") ||
+        googleEnabled === false
+      ) {
+        setError(
+          "Google Sign-In needs to be enabled in your Supabase Dashboard under Authentication -> Providers -> Google (add your Google Client ID and Secret).",
+        )
+      } else {
+        setError(authError.message)
+      }
     }
   }
 
@@ -737,17 +747,10 @@ function Login({
               <Button
                 variant="secondary"
                 onClick={continueWithGoogle}
-                disabled={loading || googleEnabled === false}
+                disabled={loading}
               >
-                {googleEnabled === false
-                  ? "Google sign-in unavailable"
-                  : "Continue with Google"}
+                Continue with Google
               </Button>
-              {googleEnabled === false && (
-                <small>
-                  Enable Google under Supabase Authentication providers.
-                </small>
-              )}
             </div>
           </>
         )}
